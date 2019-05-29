@@ -15,8 +15,10 @@
 namespace sqlite {
 	class db {
 		sqlite3* pdb;
+		char* errmsg_;
 	public:
 		db(const char* file)
+			: errmsg_(0)
 		{
 			assert (SQLITE_OK == sqlite3_open(file, &pdb));
 		}
@@ -29,18 +31,28 @@ namespace sqlite {
 		operator sqlite3*() {
 			return pdb;
 		}
-		int exec(const char* sql, int(*cb)(void*, int, char**, char**) = 0)
+		const char* errmsg() const
 		{
-			return sqlite3_exec(pdb, sql, cb, 0, 0);
+			return errmsg_;
+		}
+
+		int exec(const char* sql, int(*cb)(void*, int, char**, char**) = 0, void* arg = 0)
+		{
+			if (errmsg_) 
+				sqlite3_free(errmsg_);
+
+			return sqlite3_exec(pdb, sql, cb, arg, &errmsg_);
 		}
 		class stmt {
+			sqlite::db& db;
 			sqlite3_stmt* pstmt;
+			const char* tail_;
 		public:
-			stmt()
-				: pstmt(nullptr)
+			stmt(sqlite::db& db)
+				: db(db), pstmt(nullptr)
 			{ }
-			stmt(const stmt&) = default;
-			stmt& operator=(const stmt&) = default;
+			stmt(const stmt&) = delete;
+			stmt& operator=(const stmt&) = delete;
 			~stmt()
 			{
 				if (pstmt != nullptr)
@@ -58,6 +70,10 @@ namespace sqlite {
 			{
 				return sqlite3_step(pstmt);
 			}
+			const char* tail() const
+			{
+				return tail_;
+			}
 			int bind(int col, int i)
 			{
 				return sqlite3_bind_int(pstmt, col, i);
@@ -70,18 +86,15 @@ namespace sqlite {
 			{
 				return sqlite3_bind_double(pstmt, col, d);
 			}
-			int bind(int col, const char* t, int n = -1)
+			int bind(int col, const char* t, int n = -1,  void(*dealloc)(void*) = SQLITE_STATIC)
 			{
-				return sqlite3_bind_text(pstmt, col, t, n, SQLITE_STATIC);
+				return sqlite3_bind_text(pstmt, col, t, n, dealloc);
+			}
+			int prepare(const char* sql, int nsql = -1)
+			{
+				return sqlite3_prepare_v2(db, sql, nsql, &pstmt, &tail_);
 			}
 		};
-		stmt prepare(const char* sql, int nsql = -1)
-		{
-			stmt stmt;
-			assert (SQLITE_OK == sqlite3_prepare_v2(pdb, sql, nsql, &stmt, 0));
-
-			return std::move(stmt);
-		}
 	};
 }
 
@@ -96,10 +109,26 @@ int callback(void *, int argc, char **argv, char **argn) {
 void test_sqlite()
 {
 	int result;
+	const char* s;
 	sqlite::db db("tmp.db");
 	result = db.exec("create table tbl1(one varchar(10), two smallint)");
+	s = db.errmsg();
 	result = db.exec("insert into tbl1 values('hello!',10);");
+	s = db.errmsg();
 	result = db.exec("insert into tbl1 values('goodbye',20);");
+	s = db.errmsg();
+	sqlite::db::stmt stmt(db);
+	result = stmt.prepare("insert into tbl1 values(?,?)");
+	s = stmt.tail();
+	result = stmt.bind(1, "foo");
+	s = stmt.tail();
+	result = stmt.bind(2, 30);
+	s = stmt.tail();
+	result = stmt.step();
+	s = stmt.tail();
+	result = stmt.reset();
+	s = stmt.tail();
+
 	result = db.exec("select * from tbl1", callback);
 }
 
@@ -186,6 +215,9 @@ inline auto parse(const string& line)
 int main()
 {
 	test_sqlite();
+
+return 0;
+
 	string line;
 
 	getline(cin, line);
