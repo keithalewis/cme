@@ -1,5 +1,5 @@
-CXXFLAGS = -g -std=c++17
-LDFLAGS = -lsqlite3
+CXXFLAGS = $(shell pkg-config --cflags) -g -std=c++17
+LDFLAGS = $(shell pkg-config --libs sqlite3)
 
 cme: cme.cpp
-	g++ $(CXXFLAGS) cme.cpp -o cme $(LDFLAGS)
+	g++ $(CXXFLAGS) $< $(LDFLAGS) -o $@
