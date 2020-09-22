@@ -6,9 +6,9 @@
 #include <cstring>
 #include <ctime>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <tuple>
-#include <variant>
 
 #include <sqlite3.h>
 
@@ -200,7 +200,9 @@ cout << "parse_double: " << d << ":" << line.substr(pos, 12) << endl;
 STRIKE     OPEN      HIGH      LOW       LAST      SETT    CHGE     EST.VOL       SETT         VOL         INT
 DEC17   2582.20   2592.20B  2580.00   2591.20   2590.90   +4.10        2368    2586.80        3023       62200
 */
-inline auto parse(const string& line)
+
+using ohlc = std::tuple<double,double,double,double,double,double>;
+ohlc parse(const string& line)
 {
 	double open = parse_double(line, 6);
 	double high = parse_double(line, 16);
@@ -256,15 +258,16 @@ cout << "mmmyy: " << mmmyy << endl;
 			continue;
 		}
 
+		ohlc o;
 		if (type == 'F') {
 			string month = line.substr(0,5); // MMMYY
-			auto [open, high, low, last, sett, vol] = parse(line);
-cout << inst.substr(0,10) << "," << type << "," << open << endl;
+			o = parse(line);
+//cout << inst.substr(0,10) << "," << type << "," << open << endl;
 		}
 		else {
 			unsigned long strike = stoul(line);
-			auto [open, high, low, last, sett, vol] = parse(line);
-cout << inst.substr(0,10) << "," << type << "," << open << endl;
+			o = parse(line);
+//cout << inst.substr(0,10) << "," << type << "," << open << endl;
 		}
 	}
 
